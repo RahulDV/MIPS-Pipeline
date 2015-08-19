@@ -3,6 +3,8 @@
 typedef struct maxFactor{
 	int x;
 	int y;
+
+
 } maxFactor;
 int main(){
 	int i,T,x,y;
