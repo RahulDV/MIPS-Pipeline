@@ -20,7 +20,7 @@ int main(){
 	clock_t begin, end;
 	double timeSpent;
 	int numberOfBoxes;
-	printf("Enter the number of boxes\n");
+	printf("Enter the of boxes\n");
 	scanf("%d",&numberOfBoxes);
 	int weightOfBox[numberOfBoxes];
 	int capacityOfEachTruck;
