@@ -282,11 +282,11 @@ void parseFile(void) {
 
   current = fileStart;
  
-  while(current < fileEnd) {
+  while(current <= fileEnd) {
     if(insideWord == 1) {
       // If we are inside a word, we only care about
       // the end of this word.
-      if(*current == ' ') {
+      if(*current == ' ' || current==fileEnd) {
         if(isGoodWord(wordStart, current-1)) {
           addWordToList(wordStart, current-1);
         }
