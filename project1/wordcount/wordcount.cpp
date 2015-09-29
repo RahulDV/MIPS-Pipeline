@@ -216,7 +216,7 @@ int isGoodWord(char * start, char * end) {
     // The last letter of a word doesn't matter.
     while(cur < end) {
       char curr_ltr = toupper(*cur);
-      if(curr_ltr < 'A' || curr_ltr > 'Z') {
+      if((curr_ltr < 'A' || curr_ltr > 'Z') && (curr_ltr != '\n')) {
         isGood = 0;
         break;
       }
@@ -355,6 +355,7 @@ int main(int argc, char ** argv) {
   // Initialize the global list.
   listInit(&gWordsList);
 
+	while(1) {; }
   // Now we parse the file
   parseFile();
 
