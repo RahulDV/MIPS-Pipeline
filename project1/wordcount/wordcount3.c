@@ -15,7 +15,10 @@ typedef struct validWordList {
 } validWords;
 
 validWords * addWordToList(char *wstart,char *wend,validWords *list);
-
+validWords * merge(validWords *a, validWords *b);
+validWords * mergeSort(validWords *list);
+void split(validWords *list, validWords **a, validWords **b);
+void printList(validWords *list);
 int main(int argc, char **argv){
 
 	int fd;
@@ -99,11 +102,14 @@ int main(int argc, char **argv){
 		wordEndChar=fcurrent;		
 		fcurrent++;
 	}
+//	printList(list);
+	list=mergeSort(list);
 //	printf("%d\n",count);
 	while(list!=NULL){
 		printf("%s\t%d\n",list->word,list->occurences);
 		list=list->next;
 	}
+	
 }
 
 validWords * addWordToList(char *wstart, char *wend, validWords *list){
@@ -142,4 +148,86 @@ validWords * addWordToList(char *wstart, char *wend, validWords *list){
 		}
 	}
 	return list;
+}
+
+validWords * merge(validWords *a, validWords *b){
+//	printf("merge starts here =========================================== \n");
+//	printf("printing A first\n");
+//	printList(a);
+//	printf("printing B Second\n");
+//	printList(b);
+	validWords *result=NULL;
+	if(a==NULL){
+		return b;
+	}else if(b==NULL){
+		return a;
+	}
+	if(a->occurences>b->occurences){
+		result=a;
+		a=a->next;
+	}else{
+		result=b;
+		b=b->next;
+	}
+	validWords *current=result;
+	while(a!=NULL && b!=NULL){
+		if(a->occurences>b->occurences){
+			current->next=a;
+			a=a->next;
+			current=current->next;
+		}else{
+			current->next=b;
+                        b=b->next;
+                        current=current->next;
+		}
+	}
+	if(a==NULL)
+		current->next=b;
+	else
+		current->next=a;
+//	printf("after merging the result is:\n");
+//	printList(result);
+	return result;
+	
 } 
+
+validWords * mergeSort(validWords *list){
+	if(list->next==NULL)
+		return list;
+	validWords *a=NULL, *b=NULL;
+	split(list,&a,&b);
+//	printList(a);
+//	printList(b);
+	a = mergeSort(a);
+	b = mergeSort(b);
+	return merge(a,b);
+}
+
+void split(validWords *list, validWords **a, validWords **b){
+	validWords *fast;
+	validWords *slow;
+	if(list==NULL || list->next==NULL){
+		*a=list;
+		*b=NULL;
+	}else{
+		slow=list;
+		fast=list->next;
+		while(fast!=NULL){
+			fast=fast->next;
+			if (fast != NULL){
+			        slow = slow->next;
+			        fast = fast->next;
+      			}
+		}
+		*a=list;
+		*b=slow->next;
+		slow->next=NULL;
+	}
+}
+
+void printList(validWords *list){
+	while(list!=NULL){
+		printf("%s\t%d\n",list->word,list->occurences);
+		list=list->next;
+	}
+}
