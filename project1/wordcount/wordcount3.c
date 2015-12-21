@@ -1,34 +1,49 @@
-#include<stdio.h>
+#include <stdio.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <ctype.h>
-#include<string.h>
+#include <string.h>
+#include <time.h>
+#include <pthread.h>
+#include <semaphore.h>
 #define MAX_VALIDWORD_LENGTH 20
-
+#define NUM_OF_THREADS 8
 typedef struct validWordList {
 	char word[MAX_VALIDWORD_LENGTH];
 	int occurences;
 	struct validWordList *next;
 } validWords;
 
-validWords * addWordToList(char *wstart,char *wend,validWords *list);
-validWords * merge(validWords *a, validWords *b);
-validWords * mergeSort(validWords *list);
-void split(validWords *list, validWords **a, validWords **b);
-void printList(validWords *list);
-int main(int argc, char **argv){
+typedef struct chuck{
+	char *tstart;
+	char *tend;
+}chunk;
 
+void addWordToList(char *wstart,char *wend);
+validWords * merge(validWords *a, validWords *b);
+validWords * mergeSort(validWords *alist);
+void split(validWords *alist, validWords **a, validWords **b);
+void printList(validWords *alist);
+void *runner(chunk *tmem);
+
+validWords *list=NULL;
+
+sem_t mutex;
+
+int main(int argc, char **argv){
+	clock_t begin, end;
+	double timeSpent;
+	begin=clock();
 	int fd;
 	char *fname;
 	struct stat finfo;
 	char *fdata;
 	char *fstart;
 	char *fend;
-	char *fcurrent;	
-	validWords *list=NULL;
+	sem_init(&mutex,0,1);
 	if(argc<=2){
 		if(argc==2){
 			printf("Third argument is missing\n");
@@ -64,55 +79,68 @@ int main(int argc, char **argv){
 	
 	fstart=fdata;
 	fend=fdata+finfo.st_size;
-
-	fcurrent=fstart;
-	
-	//Reaching to the first valid word
-	while((toupper(*fcurrent)<'A' || toupper(*fcurrent)>'Z') && *fcurrent!='-' && fcurrent<fend){
-		fcurrent++;
-	}
-	char *wordStartChar=fcurrent;
-	char *wordEndChar=NULL;
-	int isGoodWord=1;
-//	int count=0;
-	char c;
-	while(fcurrent<fend){
-		c = toupper(*fcurrent);
-		if((c<'A' || c>'Z') && c!='-' && c!=' ' && c!='\n'){
-			isGoodWord=0;
-		}else if(c==' ' || c=='\n'){
-			if(isGoodWord){
-				//add semaphore here
-				list = addWordToList(wordStartChar, wordEndChar, list);
-				//leaveSemaphore lock here
-//				count++;		
-			}
-			while((c<'A' || c>'Z') && c!='-' && fcurrent<fend){
-				fcurrent++;
-				c = toupper(*fcurrent);
-			}
-			if(fcurrent>=fend){
-				break;
-			}else {
-				wordStartChar=fcurrent;
-			        wordEndChar=NULL;
-			        isGoodWord=1;	
-			}		
+	off_t tchunk = finfo.st_size/NUM_OF_THREADS;
+	//Starting Multithreading here.
+	pthread_t tidArray[NUM_OF_THREADS];
+	int i;
+	int additionalThreadsRequired=1;
+	pthread_t tid;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	for(i=0;i<NUM_OF_THREADS-1;i++){
+		char *tfend=fstart+tchunk;
+		while(*tfend!=' '&&*tfend!='\n')
+			tfend++;
+		if(tfend>=fend){
+			additionalThreadsRequired=0;
+			tfend=fend;
 		}
-		wordEndChar=fcurrent;		
-		fcurrent++;
+		chunk *tmem = malloc(sizeof(chunk));
+		tmem->tstart=fstart;
+		tmem->tend=tfend;
+		if(pthread_create(&tid,&attr,(void *)&runner,tmem)!=0){
+			perror("Thread creating failed");
+			exit(-1);
+		}
+		tidArray[i]=tid;
+		fstart=tfend+1;
+		if(additionalThreadsRequired==0)
+			break;
 	}
+	if(additionalThreadsRequired && fstart<fend){
+		chunk *tmem = malloc(sizeof(chunk));
+                tmem->tstart=fstart;
+                tmem->tend=fend;
+                if(pthread_create(&tid,&attr,(void *)&runner,tmem)!=0){
+                        perror("Thread creating failed");
+                        exit(-1);
+                }
+                tidArray[i]=tid;
+
+	}
+	for(i=0;i<NUM_OF_THREADS;i++){
+		pthread_join(tidArray[i],NULL);
+	}
+	
+//	runner(fstart,fend);
 //	printList(list);
 	list=mergeSort(list);
 //	printf("%d\n",count);
-	while(list!=NULL){
+	int counter=0;
+//	int lines = (int)(argv[2][0] - '0');
+	int lines = atoi(argv[2]);
+	while(list!=NULL&&counter<lines){
 		printf("%s\t%d\n",list->word,list->occurences);
 		list=list->next;
+		counter++;
 	}
-	
+	sem_destroy(&mutex);
+	end=clock();
+	timeSpent=(double)(end-begin)/CLOCKS_PER_SEC;
+	printf("execution time : %lf seconds\n",timeSpent);
 }
 
-validWords * addWordToList(char *wstart, char *wend, validWords *list){
+void addWordToList(char *wstart, char *wend){
 	char *iterator=wstart;
 	char validWord[MAX_VALIDWORD_LENGTH];
 	int i=0;
@@ -147,7 +175,52 @@ validWords * addWordToList(char *wstart, char *wend, validWords *list){
 			previous->next=current;
 		}
 	}
-	return list;
+	
+}
+
+void *runner(chunk *tmem){
+	char *fstart=tmem->tstart;
+	char *fend=tmem->tend;
+	char *fcurrent=fstart;
+	
+	//Reaching to the first valid word
+	while((toupper(*fcurrent)<'A' || toupper(*fcurrent)>'Z') && *fcurrent!='-' && fcurrent<fend){
+		fcurrent++;
+	}
+	char *wordStartChar=fcurrent;
+	char *wordEndChar=NULL;
+	int isGoodWord=1;
+//	int count=0;
+	char c;
+	while(fcurrent<fend){
+		c = toupper(*fcurrent);
+		if((c<'A' || c>'Z') && c!='-' && c!=' ' && c!='\n'){
+			isGoodWord=0;
+		}else if(c==' ' || c=='\n'){
+			if(isGoodWord){
+				//add semaphore here
+				sem_wait(&mutex);
+				addWordToList(wordStartChar, wordEndChar);
+				//leaveSemaphore lock here
+				sem_post(&mutex);
+//				count++;		
+			}
+			while((c<'A' || c>'Z') && c!='-' && fcurrent<fend){
+				fcurrent++;
+				c = toupper(*fcurrent);
+			}
+			if(fcurrent>=fend){
+				break;
+			}else {
+				wordStartChar=fcurrent;
+			        wordEndChar=NULL;
+			        isGoodWord=1;	
+			}		
+		}
+		wordEndChar=fcurrent;		
+		fcurrent++;
+	}
+	pthread_exit(0);
 }
 
 validWords * merge(validWords *a, validWords *b){
