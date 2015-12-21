@@ -9,14 +9,21 @@
 #include <time.h>
 #include <pthread.h>
 #include <semaphore.h>
+
+//Assuming the valid word to be no longer 20 continuous valid charactes by default.
 #define MAX_VALIDWORD_LENGTH 20
-#define NUM_OF_THREADS 8
+
+//defining the number of threads
+#define NUM_OF_THREADS 2
+
+//This is the list data structure that stores all the valid words
 typedef struct validWordList {
 	char word[MAX_VALIDWORD_LENGTH];
 	int occurences;
 	struct validWordList *next;
 } validWords;
 
+//This structure is used to provide the start and end addresses of the mmapped file that each thread is support scan
 typedef struct chuck{
 	char *tstart;
 	char *tend;
@@ -29,8 +36,10 @@ void split(validWords *alist, validWords **a, validWords **b);
 void printList(validWords *alist);
 void *runner(chunk *tmem);
 
+//Valid words list being declared as global variable so that all the threads can access it.
 validWords *list=NULL;
 
+//mutex initialization
 sem_t mutex;
 
 int main(int argc, char **argv){
@@ -44,6 +53,8 @@ int main(int argc, char **argv){
 	char *fstart;
 	char *fend;
 	sem_init(&mutex,0,1);
+
+	//If expected arguments are not provided we throw following error messages
 	if(argc<=2){
 		if(argc==2){
 			printf("Third argument is missing\n");
@@ -79,8 +90,11 @@ int main(int argc, char **argv){
 	
 	fstart=fdata;
 	fend=fdata+finfo.st_size;
+
+	//dividing the whole content equally among the threads.
 	off_t tchunk = finfo.st_size/NUM_OF_THREADS;
-	//Starting Multithreading here.
+	
+	//The next few lines of code performs a domestic check so the chunk divided for each thread does not cut through a valid word at the end. Hence, instead of ending the chunk sharply at fdata+tchunk we increase the boundary to an ' ' or '\n'.
 	pthread_t tidArray[NUM_OF_THREADS];
 	int i;
 	int additionalThreadsRequired=1;
@@ -98,6 +112,8 @@ int main(int argc, char **argv){
 		chunk *tmem = malloc(sizeof(chunk));
 		tmem->tstart=fstart;
 		tmem->tend=tfend;
+
+		//Thread creation
 		if(pthread_create(&tid,&attr,(void *)&runner,tmem)!=0){
 			perror("Thread creating failed");
 			exit(-1);
@@ -111,6 +127,8 @@ int main(int argc, char **argv){
 		chunk *tmem = malloc(sizeof(chunk));
                 tmem->tstart=fstart;
                 tmem->tend=fend;
+
+		//Last thread created here.
                 if(pthread_create(&tid,&attr,(void *)&runner,tmem)!=0){
                         perror("Thread creating failed");
                         exit(-1);
@@ -122,10 +140,7 @@ int main(int argc, char **argv){
 		pthread_join(tidArray[i],NULL);
 	}
 	
-//	runner(fstart,fend);
-//	printList(list);
 	list=mergeSort(list);
-//	printf("%d\n",count);
 	int counter=0;
 //	int lines = (int)(argv[2][0] - '0');
 	int lines = atoi(argv[2]);
@@ -140,17 +155,16 @@ int main(int argc, char **argv){
 	printf("execution time : %lf seconds\n",timeSpent);
 }
 
+//This method takes a valid word within the boundaries of wstart and wend and adds it to list. If word already in list in increaments the occurrences counter.
 void addWordToList(char *wstart, char *wend){
 	char *iterator=wstart;
 	char validWord[MAX_VALIDWORD_LENGTH];
 	int i=0;
 	while(iterator<=wend && i<MAX_VALIDWORD_LENGTH){
-		//printf("%c",*iterator);
 		validWord[i]=toupper(*iterator);
 		iterator++;
 		i++;
 	}
-	//printf("\n");
 	validWord[i]='\0';
 	if(list==NULL){
 		list=malloc(sizeof(validWords));
@@ -178,6 +192,7 @@ void addWordToList(char *wstart, char *wend){
 	
 }
 
+//runner method that is executed by each thread independently
 void *runner(chunk *tmem){
 	char *fstart=tmem->tstart;
 	char *fend=tmem->tend;
@@ -190,7 +205,6 @@ void *runner(chunk *tmem){
 	char *wordStartChar=fcurrent;
 	char *wordEndChar=NULL;
 	int isGoodWord=1;
-//	int count=0;
 	char c;
 	while(fcurrent<fend){
 		c = toupper(*fcurrent);
@@ -203,7 +217,6 @@ void *runner(chunk *tmem){
 				addWordToList(wordStartChar, wordEndChar);
 				//leaveSemaphore lock here
 				sem_post(&mutex);
-//				count++;		
 			}
 			while((c<'A' || c>'Z') && c!='-' && fcurrent<fend){
 				fcurrent++;
@@ -223,12 +236,8 @@ void *runner(chunk *tmem){
 	pthread_exit(0);
 }
 
+//All below methods correspond to sorting. Mergesort algorithm is implemented.
 validWords * merge(validWords *a, validWords *b){
-//	printf("merge starts here =========================================== \n");
-//	printf("printing A first\n");
-//	printList(a);
-//	printf("printing B Second\n");
-//	printList(b);
 	validWords *result=NULL;
 	if(a==NULL){
 		return b;
@@ -258,8 +267,6 @@ validWords * merge(validWords *a, validWords *b){
 		current->next=b;
 	else
 		current->next=a;
-//	printf("after merging the result is:\n");
-//	printList(result);
 	return result;
 	
 } 
@@ -269,8 +276,6 @@ validWords * mergeSort(validWords *list){
 		return list;
 	validWords *a=NULL, *b=NULL;
 	split(list,&a,&b);
-//	printList(a);
-//	printList(b);
 	a = mergeSort(a);
 	b = mergeSort(b);
 	return merge(a,b);
